@@ -154,7 +154,7 @@ public class RRD4jPersistenceService implements QueryablePersistenceService {
                             sample.setValue(DATASOURCE_STATE, lastValue);
                             sample.update();
                             logger.debug("Stored '{}' with state '{}' in rrd4j database (again)", name,
-                                    mapToState(lastValue, item.getName()));
+                                    mapToState(lastValue, item));
                         }
                     }
                 } catch (IOException e) {
@@ -230,6 +230,14 @@ public class RRD4jPersistenceService implements QueryablePersistenceService {
     @Override
     public Iterable<HistoricItem> query(FilterCriteria filter) {
         String itemName = filter.getItemName();
+        Item item = null;
+        try {
+            item = itemRegistry.getItem(itemName);
+
+        } catch (ItemNotFoundException e) {
+            logger.debug("Could not find item '{}' in registry", itemName);
+        }
+
         RrdDb db = getDB(itemName);
         if (db != null) {
             ConsolFun consolidationFunction = getConsolidationFunction(db);
@@ -251,7 +259,7 @@ public class RRD4jPersistenceService implements QueryablePersistenceService {
                             // we are asked only for the most recent value!
                             double lastValue = db.getLastDatasourceValue(DATASOURCE_STATE);
                             if (!Double.isNaN(lastValue)) {
-                                HistoricItem rrd4jItem = new RRD4jItem(itemName, mapToState(lastValue, itemName),
+                                HistoricItem rrd4jItem = new RRD4jItem(itemName, mapToState(lastValue, item),
                                         ZonedDateTime.ofInstant(
                                                 Instant.ofEpochMilli(db.getLastArchiveUpdateTime() * 1000),
                                                 ZoneId.systemDefault()));
@@ -277,7 +285,7 @@ public class RRD4jPersistenceService implements QueryablePersistenceService {
                 long step = result.getRowCount() > 1 ? result.getStep() : 0;
                 for (double value : result.getValues(DATASOURCE_STATE)) {
                     if (!Double.isNaN(value) && (((ts >= start) && (ts <= end)) || (start == end))) {
-                        RRD4jItem rrd4jItem = new RRD4jItem(itemName, mapToState(value, itemName),
+                        RRD4jItem rrd4jItem = new RRD4jItem(itemName, mapToState(value, item),
                                 ZonedDateTime.ofInstant(Instant.ofEpochMilli(ts * 1000), ZoneId.systemDefault()));
                         items.add(rrd4jItem);
                     }
@@ -384,26 +392,21 @@ public class RRD4jPersistenceService implements QueryablePersistenceService {
     }
 
     @SuppressWarnings({ "rawtypes", "unchecked" })
-    private State mapToState(double value, String itemName) {
-        try {
-            Item item = itemRegistry.getItem(itemName);
-            if (item instanceof SwitchItem && !(item instanceof DimmerItem)) {
-                return value == 0.0d ? OnOffType.OFF : OnOffType.ON;
-            } else if (item instanceof ContactItem) {
-                return value == 0.0d ? OpenClosedType.CLOSED : OpenClosedType.OPEN;
-            } else if (item instanceof DimmerItem || item instanceof RollershutterItem) {
-                // make sure Items that need PercentTypes instead of DecimalTypes do receive the right information
-                return new PercentType((int) Math.round(value * 100));
-            } else if (item instanceof NumberItem) {
-                Unit<? extends Quantity<?>> unit = ((NumberItem) item).getUnit();
-                if (unit != null) {
-                    return new QuantityType(value, unit);
-                } else {
-                    return new DecimalType(value);
-                }
+    private State mapToState(double value, @Nullable Item item) {
+        if (item instanceof SwitchItem && !(item instanceof DimmerItem)) {
+            return value == 0.0d ? OnOffType.OFF : OnOffType.ON;
+        } else if (item instanceof ContactItem) {
+            return value == 0.0d ? OpenClosedType.CLOSED : OpenClosedType.OPEN;
+        } else if (item instanceof DimmerItem || item instanceof RollershutterItem) {
+            // make sure Items that need PercentTypes instead of DecimalTypes do receive the right information
+            return new PercentType((int) Math.round(value * 100));
+        } else if (item instanceof NumberItem) {
+            Unit<? extends Quantity<?>> unit = ((NumberItem) item).getUnit();
+            if (unit != null) {
+                return new QuantityType(value, unit);
+            } else {
+                return new DecimalType(value);
             }
-        } catch (ItemNotFoundException e) {
-            logger.debug("Could not find item '{}' in registry", itemName);
         }
         // just return a DecimalType as a fallback
         return new DecimalType(value);
