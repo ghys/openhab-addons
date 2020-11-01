@@ -399,13 +399,6 @@ public class RRD4jPersistenceService implements QueryablePersistenceService {
         } else if (item instanceof DimmerItem || item instanceof RollershutterItem) {
             // make sure Items that need PercentTypes instead of DecimalTypes do receive the right information
             return new PercentType((int) Math.round(value * 100));
-        } else if (item instanceof NumberItem) {
-            Unit<? extends Quantity<?>> unit = ((NumberItem) item).getUnit();
-            if (unit != null) {
-                return new QuantityType(value, unit);
-            } else {
-                return new DecimalType(value);
-            }
         }
         // just return a DecimalType as a fallback
         return new DecimalType(value);
