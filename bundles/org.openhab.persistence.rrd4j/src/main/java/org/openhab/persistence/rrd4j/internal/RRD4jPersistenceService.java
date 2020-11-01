@@ -233,7 +233,6 @@ public class RRD4jPersistenceService implements QueryablePersistenceService {
         Item item = null;
         try {
             item = itemRegistry.getItem(itemName);
-
         } catch (ItemNotFoundException e) {
             logger.debug("Could not find item '{}' in registry", itemName);
         }
